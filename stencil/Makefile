@@ -1,6 +1,6 @@
 PROG = stencil
 
-CFLAGS = -Wall -g -O3
+CFLAGS = -Wall -g -O3 -mavx2
 LDLIBS = -lm
 
 .phony: all clean

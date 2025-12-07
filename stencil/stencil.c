@@ -5,8 +5,10 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <immintrin.h>
 
 #define ELEMENT_TYPE float
+#define NB_ELEMENT_VECT2 256/sizeof(ELEMENT_TYPE)
 
 #define DEFAULT_MESH_WIDTH 2000
 #define DEFAULT_MESH_HEIGHT 1000
@@ -391,6 +393,72 @@ static void write_mesh_to_file(FILE *file, const ELEMENT_TYPE *p_mesh, struct s_
 
                 ret = fprintf(file, "\n");
                 IO_CHECK("fprintf", ret);
+        }
+}
+static void vec_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
+{
+        const int margin_x = (STENCIL_WIDTH - 1) / 2;
+        const int margin_y = (STENCIL_HEIGHT - 1) / 2;
+        int x;
+        int y;
+        int stencil_x, stencil_y;
+        ELEMENT_TYPE *p_temporary_mesh = malloc(p_settings->mesh_width * p_settings->mesh_height * sizeof(*p_mesh));
+        for(y = margin_y ; y <= p_settings->mesh_height - margin_y - NB_ELEMENT_VECT2 ; y++)
+        {
+                for(x = margin_x; x < p_settings->mesh_width - margin_x; x+=NB_ELEMENT_VECT2)
+                {
+                        __m256 value = _mm256_loadu_ps((p_mesh + y * p_settings->mesh_width + x));
+                        
+                        for(stencil_y = 0 ; stencil_y < STENCIL_HEIGHT ; stencil_y++)
+                        {
+                                for(stencil_x = 0 ; stencil_x < STENCIL_WIDTH ; stencil_x++)
+                                {       
+                                        __m256 a = _mm256_loadu_ps((p_mesh + (y + stencil_y - margin_y) * p_settings->mesh_width + (x + stencil_x - margin_x)));
+                                        __m256 b = _mm256_set1_ps(stencil_coefs[stencil_y * STENCIL_WIDTH + stencil_x]);
+                                        value = _mm256_fmadd_ps(a,b,value);
+                                }
+                        }
+                        _mm256_storeu_ps(p_temporary_mesh + y * p_settings->mesh_width + x ,value);
+                }
+        }
+
+        ELEMENT_TYPE * tmp = p_mesh;
+        p_mesh = p_temporary_mesh;
+        p_temporary_mesh = tmp;
+}
+
+static void naive_stencil_func_good_order(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
+{
+        const int margin_x = (STENCIL_WIDTH - 1) / 2;
+        const int margin_y = (STENCIL_HEIGHT - 1) / 2;
+        int x;
+        int y;
+
+        ELEMENT_TYPE *p_temporary_mesh = malloc(p_settings->mesh_width * p_settings->mesh_height * sizeof(*p_mesh));
+        for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
+        {
+                for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
+                {
+                        ELEMENT_TYPE value = p_mesh[y * p_settings->mesh_width + x];
+                        int stencil_x, stencil_y;
+                        for (stencil_y = 0; stencil_y < STENCIL_HEIGHT; stencil_y++)
+                        {
+                                for (stencil_x = 0; stencil_x < STENCIL_WIDTH; stencil_x++)
+                                {
+                                        value +=
+                                            p_mesh[(y + stencil_y - margin_y) * p_settings->mesh_width + (x + stencil_x - margin_x)] * stencil_coefs[stencil_y * STENCIL_WIDTH + stencil_x];
+                                }
+                        }
+                        p_temporary_mesh[y * p_settings->mesh_width + x] = value;
+                }
+        }
+
+        for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
+        {
+                for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
+                {
+                        p_mesh[y * p_settings->mesh_width + x] = p_temporary_mesh[y * p_settings->mesh_width + x];
+                }
         }
 }
 
