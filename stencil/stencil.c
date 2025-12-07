@@ -502,7 +502,7 @@ static void run(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
         int i;
         for (i = 0; i < p_settings->nb_iterations; i++)
         {
-                naive_stencil_func(p_mesh, p_settings);
+                vec_stencil_func(p_mesh, p_settings);
 
                 if (p_settings->enable_output)
                 {
