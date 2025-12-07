@@ -422,9 +422,13 @@ static void vec_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings
                 }
         }
 
-        ELEMENT_TYPE * tmp = p_mesh;
-        p_mesh = p_temporary_mesh;
-        p_temporary_mesh = tmp;
+         for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
+        {
+                for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
+                {
+                        p_mesh[y * p_settings->mesh_width + x] = p_temporary_mesh[y * p_settings->mesh_width + x];
+                }
+        }
 }
 
 static void naive_stencil_func_good_order(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
