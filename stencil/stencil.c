@@ -8,7 +8,7 @@
 #include <immintrin.h>
 
 #define ELEMENT_TYPE float
-#define NB_ELEMENT_VECT2 256/sizeof(ELEMENT_TYPE)
+#define NB_ELEMENT_VECT2 32/sizeof(ELEMENT_TYPE)
 
 #define DEFAULT_MESH_WIDTH 2000
 #define DEFAULT_MESH_HEIGHT 1000
@@ -403,9 +403,9 @@ static void vec_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings
         int y;
         int stencil_x, stencil_y;
         ELEMENT_TYPE *p_temporary_mesh = malloc(p_settings->mesh_width * p_settings->mesh_height * sizeof(*p_mesh));
-        for(y = margin_y ; y <= p_settings->mesh_height - margin_y ; y++)
-        {
-                for(x = margin_x; x < p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
+        for(y = margin_y ; y < p_settings->mesh_height - margin_y ; y++)
+        {       
+                for(x = margin_x; x <= p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
                 {
                         __m256 value = _mm256_loadu_ps((p_mesh + y * p_settings->mesh_width + x));
                         
@@ -436,9 +436,19 @@ static void vec_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings
                 }
         }
 
-        ELEMENT_TYPE * tmp = p_mesh;
-        p_mesh = p_temporary_mesh;
-        p_temporary_mesh = tmp;
+        for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
+        {
+                for(x = margin_x; x <= p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
+                {
+                        __m256 value = _mm256_loadu_ps(p_temporary_mesh + y * p_settings->mesh_width + x);
+                        _mm256_storeu_ps(p_mesh + y * p_settings->mesh_width + x,value);
+                }
+
+                for( ;  x < p_settings->mesh_width - margin_x ; x++)
+                {
+                        p_mesh[y * p_settings->mesh_width + x] = p_temporary_mesh[y * p_settings->mesh_width + x];
+                }
+        }
 }
 
 static void naive_stencil_func_good_order(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
