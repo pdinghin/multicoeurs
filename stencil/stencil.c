@@ -408,13 +408,14 @@ static void write_mesh_to_file(FILE *file, const ELEMENT_TYPE *p_mesh, struct s_
 }
 void stencil_func_v2(float * mesh,float * temporary,float * coefs,struct starpu_parameters parameters)
 {
-        ELEMENT_TYPE value = mesh[parameters.actual_y * parameters.mesh_width + parameters.actual_x];
+        
         int stencil_x, stencil_y;
         int margin_x = (parameters.stencil_widht - 1) / 2;
         int margin_y = (parameters.stencil_height - 1) / 2;
         int x;
         for (x = margin_x; x < parameters.mesh_width - margin_x; x++)
         {
+                ELEMENT_TYPE value = mesh[parameters.actual_y * parameters.mesh_width + x];
                 for (stencil_y = 0; stencil_y < parameters.stencil_height; stencil_y++)
                 {
                         for (stencil_x = 0; stencil_x < parameters.stencil_widht; stencil_x++)
