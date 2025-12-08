@@ -6,7 +6,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <immintrin.h>
-#include "starpu.h"
+
 
 #define ELEMENT_TYPE float
 #define NB_ELEMENT_VECT2 32/sizeof(ELEMENT_TYPE)
@@ -51,6 +51,7 @@ struct s_settings
         int enable_output;
         int enable_verbose;
 };
+
 
 
 #define PRINT_ERROR(MSG)                                                    \
@@ -400,20 +401,39 @@ static void write_mesh_to_file(FILE *file, const ELEMENT_TYPE *p_mesh, struct s_
 
 
 
-static void naive_stencil_func_good_order(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
+
+static void vec_stencil_func_v2(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
         const int margin_x = (STENCIL_WIDTH - 1) / 2;
         const int margin_y = (STENCIL_HEIGHT - 1) / 2;
         int x;
         int y;
-
+        int stencil_x, stencil_y;
         ELEMENT_TYPE *p_temporary_mesh = malloc(p_settings->mesh_width * p_settings->mesh_height * sizeof(*p_mesh));
-        for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
-        {
-                for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
+        __m256 tab_stencil_coef[STENCIL_WIDTH * STENCIL_HEIGHT] ;
+        for(int i = 0 ; i < STENCIL_WIDTH * STENCIL_HEIGHT ; i++){
+                tab_stencil_coef[i] = _mm256_set1_ps(stencil_coefs[i]);
+        }
+        for(y = margin_y ; y < p_settings->mesh_height - margin_y ; y++)
+        {       
+                for(x = margin_x; x <= p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
                 {
-                        ELEMENT_TYPE value = p_mesh[y * p_settings->mesh_width + x];
-                        int stencil_x, stencil_y;
+                        __m256 value = _mm256_loadu_ps((p_mesh + y * p_settings->mesh_width + x));
+                        
+                        for(stencil_y = 0 ; stencil_y < STENCIL_HEIGHT ; stencil_y++)
+                        {
+                                for(stencil_x = 0 ; stencil_x < STENCIL_WIDTH ; stencil_x++)
+                                {       
+                                        __m256 a = _mm256_loadu_ps((p_mesh + (y + stencil_y - margin_y) * p_settings->mesh_width + (x + stencil_x - margin_x)));
+                                        value = _mm256_fmadd_ps(a,tab_stencil_coef[stencil_y * STENCIL_WIDTH + stencil_x],value);
+                                }
+                        }
+                        _mm256_storeu_ps(p_temporary_mesh + y * p_settings->mesh_width + x ,value);
+                }
+
+                for( ;  x < p_settings->mesh_width - margin_x ; x++)
+                {
+                     ELEMENT_TYPE value = p_mesh[y * p_settings->mesh_width + x];
                         for (stencil_y = 0; stencil_y < STENCIL_HEIGHT; stencil_y++)
                         {
                                 for (stencil_x = 0; stencil_x < STENCIL_WIDTH; stencil_x++)
@@ -422,18 +442,84 @@ static void naive_stencil_func_good_order(ELEMENT_TYPE *p_mesh, struct s_setting
                                             p_mesh[(y + stencil_y - margin_y) * p_settings->mesh_width + (x + stencil_x - margin_x)] * stencil_coefs[stencil_y * STENCIL_WIDTH + stencil_x];
                                 }
                         }
-                        p_temporary_mesh[y * p_settings->mesh_width + x] = value;
+                        p_temporary_mesh[y * p_settings->mesh_width + x] = value;   
                 }
         }
 
         for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
         {
-                for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
+                for(x = margin_x; x <= p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
+                {
+                        __m256 value = _mm256_loadu_ps(p_temporary_mesh + y * p_settings->mesh_width + x);
+                        _mm256_storeu_ps(p_mesh + y * p_settings->mesh_width + x,value);
+                }
+
+                for( ;  x < p_settings->mesh_width - margin_x ; x++)
                 {
                         p_mesh[y * p_settings->mesh_width + x] = p_temporary_mesh[y * p_settings->mesh_width + x];
                 }
         }
 }
+
+
+
+
+static void vec_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
+{
+        const int margin_x = (STENCIL_WIDTH - 1) / 2;
+        const int margin_y = (STENCIL_HEIGHT - 1) / 2;
+        int x;
+        int y;
+        int stencil_x, stencil_y;
+        ELEMENT_TYPE *p_temporary_mesh = malloc(p_settings->mesh_width * p_settings->mesh_height * sizeof(*p_mesh));
+        for(y = margin_y ; y < p_settings->mesh_height - margin_y ; y++)
+        {       
+                for(x = margin_x; x <= p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
+                {
+                        __m256 value = _mm256_loadu_ps((p_mesh + y * p_settings->mesh_width + x));
+                        
+                        for(stencil_y = 0 ; stencil_y < STENCIL_HEIGHT ; stencil_y++)
+                        {
+                                for(stencil_x = 0 ; stencil_x < STENCIL_WIDTH ; stencil_x++)
+                                {       
+                                        __m256 a = _mm256_loadu_ps((p_mesh + (y + stencil_y - margin_y) * p_settings->mesh_width + (x + stencil_x - margin_x)));
+                                        __m256 b = _mm256_set1_ps(stencil_coefs[stencil_y * STENCIL_WIDTH + stencil_x]);
+                                        value = _mm256_fmadd_ps(a,b,value);
+                                }
+                        }
+                        _mm256_storeu_ps(p_temporary_mesh + y * p_settings->mesh_width + x ,value);
+                }
+
+                for( ;  x < p_settings->mesh_width - margin_x ; x++)
+                {
+                     ELEMENT_TYPE value = p_mesh[y * p_settings->mesh_width + x];
+                        for (stencil_y = 0; stencil_y < STENCIL_HEIGHT; stencil_y++)
+                        {
+                                for (stencil_x = 0; stencil_x < STENCIL_WIDTH; stencil_x++)
+                                {
+                                        value +=
+                                            p_mesh[(y + stencil_y - margin_y) * p_settings->mesh_width + (x + stencil_x - margin_x)] * stencil_coefs[stencil_y * STENCIL_WIDTH + stencil_x];
+                                }
+                        }
+                        p_temporary_mesh[y * p_settings->mesh_width + x] = value;   
+                }
+        }
+
+        for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
+        {
+                for(x = margin_x; x <= p_settings->mesh_width - margin_x - NB_ELEMENT_VECT2 ; x+=NB_ELEMENT_VECT2)
+                {
+                        __m256 value = _mm256_loadu_ps(p_temporary_mesh + y * p_settings->mesh_width + x);
+                        _mm256_storeu_ps(p_mesh + y * p_settings->mesh_width + x,value);
+                }
+
+                for( ;  x < p_settings->mesh_width - margin_x ; x++)
+                {
+                        p_mesh[y * p_settings->mesh_width + x] = p_temporary_mesh[y * p_settings->mesh_width + x];
+                }
+        }
+}
+
 
 static void naive_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
@@ -475,7 +561,7 @@ static void run(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
         int i;
         for (i = 0; i < p_settings->nb_iterations; i++)
         {
-                naive_stencil_func_good_order(p_mesh, p_settings);
+                vec_stencil_func(p_mesh, p_settings);
 
                 if (p_settings->enable_output)
                 {
