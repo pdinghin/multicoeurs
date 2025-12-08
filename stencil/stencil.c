@@ -425,7 +425,7 @@ void stencil_func_v2(float * mesh,float * temporary,float * coefs,struct starpu_
                                         * coefs[stencil_y * parameters.stencil_widht + stencil_x];
                         }
                 }
-                temporary[parameters.actual_y * parameters.mesh_width + parameters.actual_x] = value;
+                temporary[parameters.actual_y * parameters.mesh_width + x] = value;
         }
 }
 
