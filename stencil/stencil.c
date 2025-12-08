@@ -498,8 +498,9 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
                                 stencil_coefs_handle,STARPU_VALUE,&parameters,sizeof(parameters),0);
                         printf("test 4\n");
                 }
+                printf("test \n");
         }
-
+        printf("test 5\n");
         starpu_task_wait_for_all();
         starpu_data_unregister(stencil_coefs_handle);
         struct starpu_codelet copy_stencil_cl={
@@ -507,7 +508,7 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
                 .nbuffers = 2,
                 .modes = {STARPU_RW,STARPU_RW},
         };
-        printf("test 5\n");
+        printf("test 6\n");
         for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
         {
                 struct starpu_parameters * parameters ; 
