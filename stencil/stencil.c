@@ -408,20 +408,24 @@ static void write_mesh_to_file(FILE *file, const ELEMENT_TYPE *p_mesh, struct s_
 }
 void stencil_func_v2(float * mesh,float * temporary,float * coefs,struct starpu_parameters parameters)
 {
-        const int margin_x = (parameters.stencil_widht - 1) / 2;
-        const int margin_y = (parameters.stencil_height - 1) / 2;
         ELEMENT_TYPE value = mesh[parameters.actual_y * parameters.mesh_width + parameters.actual_x];
         int stencil_x, stencil_y;
-        for (stencil_y = 0; stencil_y < parameters.stencil_height; stencil_y++)
+        int margin_x = (parameters.stencil_widht - 1) / 2;
+        int margin_y = (parameters.stencil_height - 1) / 2;
+        int x;
+        for (x = margin_x; x < parameters.mesh_width - margin_x; x++)
         {
-                for (stencil_x = 0; stencil_x < parameters.stencil_widht; stencil_x++)
+                for (stencil_y = 0; stencil_y < parameters.stencil_height; stencil_y++)
                 {
-                        value +=
-                                mesh[(parameters.actual_y + stencil_y - margin_y) * parameters.mesh_width + (parameters.actual_x + stencil_x - margin_x)]
-                                 * coefs[stencil_y * parameters.stencil_widht + stencil_x];
+                        for (stencil_x = 0; stencil_x < parameters.stencil_widht; stencil_x++)
+                        {
+                                value +=
+                                        mesh[(parameters.actual_y + stencil_y - margin_y) * parameters.mesh_width + (parameters.actual_x + stencil_x - margin_x)]
+                                        * coefs[stencil_y * parameters.stencil_widht + stencil_x];
+                        }
                 }
+                temporary[parameters.actual_y * parameters.mesh_width + parameters.actual_x] = value;
         }
-        temporary[parameters.actual_y * parameters.mesh_width + parameters.actual_x] = value;
 }
 
 void stencil_cpu_func_v2(void * buffers [], void * cl_arg)
@@ -438,16 +442,10 @@ void stencil_cpu_func_v2(void * buffers [], void * cl_arg)
 }
 
 void copy_stencil_func_v2(float * mesh,float * temporary,struct starpu_parameters parameters){
-        int margin_x = (parameters.stencil_widht - 1) / 2;
-        int margin_y = (parameters.stencil_height - 1) / 2;
-        int x;
+               
         for (x = margin_x; x < parameters.mesh_width - margin_x; x++)
         {
-               
-                for (x = margin_x; x < parameters.mesh_width - margin_x; x++)
-                {
-                        mesh[parameters.actual_y * parameters.mesh_width + x] = temporary[parameters.actual_y * parameters.mesh_width + x];
-                }
+                mesh[parameters.actual_y * parameters.mesh_width + x] = temporary[parameters.actual_y * parameters.mesh_width + x];
         }
 }
 
