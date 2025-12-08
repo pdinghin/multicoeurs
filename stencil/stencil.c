@@ -486,7 +486,7 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
         {
                 for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
                 {
-                        struct starpu_parameters * parameters ; 
+                        struct starpu_parameters  parameters ; 
                         parameters->actual_x = x;
                         parameters->actual_y = y;
                         parameters->mesh_height = p_settings->mesh_height;
@@ -508,7 +508,7 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
 
         for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
         {
-                struct starpu_parameters * parameters ; 
+                struct starpu_parameters  parameters ; 
                 parameters->actual_x = margin_x;
                 parameters->actual_y = y;
                 parameters->mesh_width = p_settings->mesh_width;
