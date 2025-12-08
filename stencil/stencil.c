@@ -493,7 +493,8 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
                         parameters->mesh_width = p_settings->mesh_width;
                         parameters->stencil_height = STENCIL_HEIGHT;
                         parameters->stencil_widht = STENCIL_WIDTH;
-                        starpu_task_insert(&stencil_cl,STARPU_R,p_mesh_handle,STARPU_W,p_temporary_mesh_handle,STARPU_R,stencil_coefs_handle,&parameters,sizeof(struct starpu_parameters),0);
+                        starpu_task_insert(&stencil_cl,STARPU_R,p_mesh_handle,STARPU_W,p_temporary_mesh_handle,STARPU_R,
+                                stencil_coefs_handle,STARPU_VALUE,&parameters,sizeof(struct starpu_parameters),0);
                 }
         }
 
@@ -511,7 +512,8 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
                 parameters->actual_x = margin_x;
                 parameters->actual_y = y;
                 parameters->mesh_width = p_settings->mesh_width;
-                starpu_task_insert(&copy_stencil_cl,STARPU_W,p_mesh_handle,STARPU_R,p_temporary_mesh_handle,&parameters,sizeof(struct starpu_parameters),0);
+                starpu_task_insert(&copy_stencil_cl,STARPU_W,p_mesh_handle,STARPU_R,p_temporary_mesh_handle,
+                        STARPU_VALUE,&parameters,sizeof(struct starpu_parameters),0);
                 
         }
         starpu_task_wait_for_all();
