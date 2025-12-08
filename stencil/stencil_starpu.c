@@ -841,7 +841,7 @@ static void starpu_stencil_func_v2_big_tasks(ELEMENT_TYPE *p_mesh, struct s_sett
     const int mesh_h = p_settings->mesh_height;
     const int margin_x = (STENCIL_WIDTH - 1) / 2;
     const int margin_y = (STENCIL_HEIGHT - 1) / 2;
-    int nb_threads = starpu_nb_cpus();
+    int nb_threads = sysconf(_SC_NPROCESSORS_ONLN);
     ELEMENT_TYPE *p_temporary_mesh = malloc(mesh_w * mesh_h * sizeof(*p_temporary_mesh));
     if (!p_temporary_mesh) {
         fprintf(stderr, "malloc failed\n");
