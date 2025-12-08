@@ -474,9 +474,9 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
         starpu_data_handle_t p_mesh_handle;
         starpu_data_handle_t p_temporary_mesh_handle;
         starpu_data_handle_t stencil_coefs_handle;
-        starpu_vector_data_register(&p_mesh_handle,STARPU_MAIN_RAM,p_mesh,p_settings->mesh_width*p_settings->mesh_height,sizeof(p_mesh[0]));
-        starpu_vector_data_register(&p_temporary_mesh_handle,STARPU_MAIN_RAM,p_temporary_mesh,p_settings->mesh_width*p_settings->mesh_height,sizeof(p_temporary_mesh[0]));
-        starpu_vector_data_register(&stencil_coefs_handle,STARPU_MAIN_RAM,stencil_coefs,STENCIL_WIDTH * STENCIL_HEIGHT ,sizeof(stencil_coefs[0]));
+        starpu_vector_data_register(&p_mesh_handle,STARPU_MAIN_RAM,(uintptr_t)p_mesh,p_settings->mesh_width*p_settings->mesh_height,sizeof(p_mesh[0]));
+        starpu_vector_data_register(&p_temporary_mesh_handle,STARPU_MAIN_RAM,(uintptr_t)p_temporary_mesh,p_settings->mesh_width*p_settings->mesh_height,sizeof(p_temporary_mesh[0]));
+        starpu_vector_data_register(&stencil_coefs_handle,STARPU_MAIN_RAM,(uintptr_t)stencil_coefs,STENCIL_WIDTH * STENCIL_HEIGHT ,sizeof(stencil_coefs[0]));
         struct starpu_codelet stencil_cl ={
                 .cpu_funcs = {stencil_cpu_func},
                 .nbuffers = 3,
