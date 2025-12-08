@@ -700,18 +700,18 @@ void stencil_cpu_func_partitioned(void *buffers[], void *cl_arg) {
 }
 
 void copy_line_cpu_func(void *buffers[], void *cl_arg) {
-    struct starpu_vector_interface *mesh_vh = buffers[0]; 
-    float * mesh_row = (float *)STARPU_VECTOR_GET_PTR(mesh_vh);
+    struct starpu_vector_interface *mesh_handle = buffers[0]; 
+    float * mesh = (float *)STARPU_VECTOR_GET_PTR(mesh_handle);
 
-    struct starpu_vector_interface *tmp_vh = buffers[1];  
-    float * tmp_row = (float *)STARPU_VECTOR_GET_PTR(tmp_vh);
+    struct starpu_vector_interface *temporary_handle = buffers[1];  
+    float * temporary = (float *)STARPU_VECTOR_GET_PTR(temporary_handle);
 
-    struct starpu_parameters params;
-    starpu_codelet_unpack_args(cl_arg, &params);
+    struct starpu_parameters parameters;
+    starpu_codelet_unpack_args(cl_arg, &parameters);
 
-    int margin_x = params.actual_x; 
-    for (int x = margin_x; x < params.mesh_width - margin_x; ++x) {
-        mesh_row[x] = tmp_row[x];
+    int margin_x = parameters.actual_x; 
+    for (int x = margin_x; x < parameters.mesh_width - margin_x; ++x) {
+        mesh[x] = temporary[x];
     }
 }
 
@@ -773,19 +773,7 @@ static void starpu_stencil_func_v2_partitioned(ELEMENT_TYPE *p_mesh, struct s_se
         params.mesh_width = mesh_w;
         params.stencil_height = STENCIL_HEIGHT;
         params.stencil_widht = STENCIL_WIDTH;
-
-
-        switch (STENCIL_HEIGHT) {
-            case 1:
-                starpu_task_insert(&stencil_cl,
-                    STARPU_R, row_handles[0],
-                    STARPU_W, tmp_row_handle,
-                    STARPU_R, coef_handle,
-                    STARPU_VALUE, &params, sizeof(params),
-                    0);
-                break;
-            case 3:
-                starpu_task_insert(&stencil_cl,
+        starpu_task_insert(&stencil_cl,
                     STARPU_R, row_handles[0],
                     STARPU_R, row_handles[1],
                     STARPU_R, row_handles[2],
@@ -793,35 +781,19 @@ static void starpu_stencil_func_v2_partitioned(ELEMENT_TYPE *p_mesh, struct s_se
                     STARPU_R, coef_handle,
                     STARPU_VALUE, &params, sizeof(params),
                     0);
-                break;
-            default:
+                
+    }
+    
+
+    starpu_task_wait_for_all();
+    int y,x;
+    for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
+        {
+                for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
                 {
-                    fprintf(stderr, "STENCIL_HEIGHT unsupported by this demo switch: %d\n", STENCIL_HEIGHT);
-                    exit(1);
+                        p_mesh[y * p_settings->mesh_width + x] = p_temporary_mesh[y * p_settings->mesh_width + x];
                 }
         }
-    }
-
-    starpu_task_wait_for_all();
-
-    for (int y = margin_y; y < mesh_h - margin_y; ++y) {
-        starpu_data_handle_t mesh_row_handle = starpu_data_get_sub_data(mesh_handle, 1, y);
-        starpu_data_handle_t tmp_row_handle = starpu_data_get_sub_data(temporary_handle, 1, y);
-
-        struct starpu_parameters params;
-        params.actual_x = margin_x;
-        params.actual_y = y;
-        params.mesh_width = mesh_w;
-
-        starpu_task_insert(&copy_cl,
-            STARPU_W, mesh_row_handle,
-            STARPU_R, tmp_row_handle,
-            STARPU_VALUE, &params, sizeof(params),
-            0);
-    }
-
-    starpu_task_wait_for_all();
-
     starpu_data_unpartition(mesh_handle, 0);
     starpu_data_unpartition(temporary_handle, 0);
     starpu_data_unregister(mesh_handle);
