@@ -788,12 +788,6 @@ static void starpu_stencil_func_v2_partitioned(ELEMENT_TYPE *p_mesh, struct s_se
 
       
 
-    struct starpu_codelet copy_cl = {
-        .cpu_funcs = { copy_line_cpu_func },
-        .nbuffers = 2,
-        .modes = { STARPU_W, STARPU_R }
-    };
-
     for (int y = margin_y; y < mesh_h - margin_y; ++y) {
         starpu_data_handle_t row_handles[STENCIL_HEIGHT];
         for (int sy = 0; sy < STENCIL_HEIGHT; ++sy) {
@@ -915,7 +909,7 @@ static void run(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
         int i;
         for (i = 0; i < p_settings->nb_iterations; i++)
         {
-                starpu_stencil_func_v2_partitioned(p_mesh, p_settings);
+                starpu_stencil_func_v2_big_tasks(p_mesh, p_settings);
 
                 if (p_settings->enable_output)
                 {
