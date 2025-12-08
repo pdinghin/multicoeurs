@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <omp.h>
 
 #define ELEMENT_TYPE float
 
@@ -358,52 +359,107 @@ static void print_csv_header(void)
         printf("\n");
 }
 
-static void naive_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
+static void omp_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
 {
-        memset(histogram, 0, p_settings->nb_bins * sizeof(*histogram));
+
+        const int nb_bins = p_settings->nb_bins;
+        const int array_len = p_settings->array_len;
+        const ELEMENT_TYPE lower_bound = p_settings->lower_bound;
+        const ELEMENT_TYPE upper_bound = p_settings->upper_bound;
+        
+        memset(histogram, 0, nb_bins * sizeof(*histogram));
 
         ELEMENT_TYPE *bounds = NULL;
-        bounds = malloc((p_settings->nb_bins + 1) * sizeof(*bounds));
+        bounds = malloc((nb_bins + 1) * sizeof(*bounds));
         if (bounds == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
         }
 
         {
-                const ELEMENT_TYPE offset = p_settings->lower_bound;
-                const ELEMENT_TYPE scale = p_settings->upper_bound - p_settings->lower_bound;
+                const ELEMENT_TYPE offset = lower_bound;
+                const ELEMENT_TYPE scale = upper_bound - lower_bound;
 
                 bounds[0] = offset;
 
                 int j;
-                for (j = 0; j < p_settings->nb_bins; j++)
+                for (j = 0; j < nb_bins; j++)
                 {
-                        bounds[j + 1] = offset + (j + 1) * scale / p_settings->nb_bins;
+                        bounds[j + 1] = offset + (j + 1) * scale / nb_bins;
                 }
         }
 
-        int i;
-        for (i = 0; i < p_settings->array_len; i++)
+        const ELEMENT_TYPE bin_width = (upper_bound - lower_bound) / nb_bins;
+        const ELEMENT_TYPE inv_bin_width = 1.0 / bin_width;
+
+        int nb_threads;
+        
+        #pragma omp parallel
         {
+            #pragma omp master
+            {
+                nb_threads = omp_get_num_threads();
+            }
+        }
+    
+        int *partial_histograms = calloc(nb_threads * nb_bins, sizeof(int));
+        if (partial_histograms == NULL)
+        {
+            free(bounds);
+            PRINT_ERROR("memory allocation failed for partial histograms");
+        }
+        
+        #pragma omp parallel
+        {
+            int thread_id = omp_get_thread_num();
+            int *my_histogram = partial_histograms + thread_id * nb_bins;
+
+            #pragma omp for
+            for (int i = 0; i < array_len; i++)
+            {
                 ELEMENT_TYPE value = array[i];
 
-                int j;
-                for (j = 0; j < p_settings->nb_bins; j++)
+                int j = (int)floor((value - lower_bound) * inv_bin_width);
+
+                // cas limites
+                if (j < 0)
                 {
-                        if (value >= bounds[j] && value < bounds[j + 1])
-                        {
-                                histogram[j]++;
-                                break;
-                        }
+                    // Si la valeur est < lower_bound, elle est ignorée
                 }
+                else if (j >= nb_bins)
+                {
+                    // Si la valeur est = upper_bound, on la met dans le dernier bin
+                    if (j == nb_bins)
+                    {
+                        j = nb_bins - 1;
+                        my_histogram[j]++;
+                    }
+                    // Si la valeur est > upper_bound, elle est ignorée
+                }
+                else
+                {
+                    // Cas normal
+                    my_histogram[j]++;
+                }
+            }
         }
 
+        for (int t = 0; t < nb_threads; t++)
+        {
+            int *my_histogram = partial_histograms + t * nb_bins;
+            for (int j = 0; j < nb_bins; j++)
+            {
+                histogram[j] += my_histogram[j];
+            }
+        }
+
+        free(partial_histograms);
         free(bounds);
 }
 
 static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings *p_settings)
 {
-        naive_compute_histogram(array, run_histogram, p_settings);
+        omp_compute_histogram(array, run_histogram, p_settings);
 
         if (p_settings->enable_output)
         {
@@ -427,7 +483,7 @@ static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings
 
 static int check(const ELEMENT_TYPE *array, int *check_histogram, const int *run_histogram, struct s_settings *p_settings)
 {
-        naive_compute_histogram(array, check_histogram, p_settings);
+        omp_compute_histogram(array, check_histogram, p_settings);
 
         if (p_settings->enable_output)
         {

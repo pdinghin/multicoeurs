@@ -5,6 +5,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <cuda_runtime.h>
+#include <cuda.h>
 
 #define ELEMENT_TYPE float
 
@@ -16,6 +18,8 @@
 
 #define MAX_DISPLAY_COLUMNS 10
 #define MAX_DISPLAY_ROWS 20
+
+#define BLOCK_SIZE 256
 
 struct s_settings
 {
@@ -61,7 +65,7 @@ static void usage(void)
 static void init_settings(struct s_settings **pp_settings)
 {
         assert(*pp_settings == NULL);
-        struct s_settings *p_settings = calloc(1, sizeof(*p_settings));
+        struct s_settings *p_settings = (struct s_settings *)calloc(1, sizeof(*p_settings));
         if (p_settings == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -120,8 +124,8 @@ static void parse_cmd_line(int argc, char *argv[], struct s_settings *p_settings
                                 usage();
                         }
                         float value = atof(argv[i]);
-                        int class = fpclassify(value);
-                        if ((class != FP_NORMAL) && (class != FP_ZERO))
+                        int classs = fpclassify(value);
+                        if ((classs != FP_NORMAL) && (classs != FP_ZERO))
                         {
                                 fprintf(stderr, "invalid LOWER_BOUND argument\n");
                                 exit(EXIT_FAILURE);
@@ -136,8 +140,8 @@ static void parse_cmd_line(int argc, char *argv[], struct s_settings *p_settings
                                 usage();
                         }
                         float value = atof(argv[i]);
-                        int class = fpclassify(value);
-                        if ((class != FP_NORMAL) && (class != FP_ZERO))
+                        int classs = fpclassify(value);
+                        if ((classs != FP_NORMAL) && (classs != FP_ZERO))
                         {
                                 fprintf(stderr, "invalid UPPER_BOUND argument\n");
                                 exit(EXIT_FAILURE);
@@ -197,7 +201,7 @@ static void delete_settings(struct s_settings **pp_settings)
 static void allocate_array(ELEMENT_TYPE **p_array, struct s_settings *p_settings)
 {
         assert(*p_array == NULL);
-        ELEMENT_TYPE *array = calloc(p_settings->array_len, sizeof(*array));
+        ELEMENT_TYPE *array = (ELEMENT_TYPE *)calloc(p_settings->array_len, sizeof(*array));
         if (array == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -268,7 +272,7 @@ static void write_array_to_file(FILE *file, const ELEMENT_TYPE *array, struct s_
 static void allocate_histogram(int **p_histogram, struct s_settings *p_settings)
 {
         assert(*p_histogram == NULL);
-        int *histogram = calloc(p_settings->nb_bins, sizeof(*histogram));
+        int *histogram = (int *)calloc(p_settings->nb_bins, sizeof(*histogram));
         if (histogram == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -358,52 +362,94 @@ static void print_csv_header(void)
         printf("\n");
 }
 
-static void naive_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
+__global__ void compute_histogram_kernel(const ELEMENT_TYPE *d_array, int *d_histogram,
+                                                       int array_len, int nb_bins, ELEMENT_TYPE lower_bound,
+                                                       ELEMENT_TYPE bin_width)
 {
-        memset(histogram, 0, p_settings->nb_bins * sizeof(*histogram));
+    extern __shared__ int s_hist[];
 
-        ELEMENT_TYPE *bounds = NULL;
-        bounds = malloc((p_settings->nb_bins + 1) * sizeof(*bounds));
-        if (bounds == NULL)
+    for (int j = threadIdx.x; j < nb_bins; j += blockDim.x)
+    {
+        s_hist[j] = 0;
+    }
+    __syncthreads();
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < array_len)
+    {
+        ELEMENT_TYPE value = d_array[i];
+
+        int bin_index = (int)((value - lower_bound) / bin_width);
+
+        if (bin_index >= 0 && bin_index < nb_bins)
         {
-                PRINT_ERROR("memory allocation failed");
+            atomicAdd(&s_hist[bin_index], 1);
         }
 
-        {
-                const ELEMENT_TYPE offset = p_settings->lower_bound;
-                const ELEMENT_TYPE scale = p_settings->upper_bound - p_settings->lower_bound;
+        i += gridDim.x * blockDim.x;
+    }
 
-                bounds[0] = offset;
+    __syncthreads();
 
-                int j;
-                for (j = 0; j < p_settings->nb_bins; j++)
-                {
-                        bounds[j + 1] = offset + (j + 1) * scale / p_settings->nb_bins;
-                }
+    for (int j = threadIdx.x; j < nb_bins; j += blockDim.x)
+    {
+            atomicAdd(&d_histogram[j], s_hist[j]);
         }
+}
 
-        int i;
-        for (i = 0; i < p_settings->array_len; i++)
-        {
-                ELEMENT_TYPE value = array[i];
+static void cuda_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
+{
+    int array_len = p_settings->array_len;
+    int nb_bins = p_settings->nb_bins;
+    ELEMENT_TYPE lower_bound = (ELEMENT_TYPE)p_settings->lower_bound;
+    ELEMENT_TYPE upper_bound = (ELEMENT_TYPE)p_settings->upper_bound;
 
-                int j;
-                for (j = 0; j < p_settings->nb_bins; j++)
-                {
-                        if (value >= bounds[j] && value < bounds[j + 1])
-                        {
-                                histogram[j]++;
-                                break;
-                        }
-                }
-        }
+    // Calcul de la largeur de la bin
+    ELEMENT_TYPE bin_width = (upper_bound - lower_bound) / (ELEMENT_TYPE)nb_bins;
 
-        free(bounds);
+    // 1. Allocation mémoire GPU (Device)
+    ELEMENT_TYPE *d_array = NULL;
+    int *d_histogram = NULL;
+    cudaMalloc((void **)&d_array, array_len * sizeof(ELEMENT_TYPE));
+    cudaMalloc((void **)&d_histogram, nb_bins * sizeof(int));
+
+    // 2. Copie des données Host -> Device
+    cudaMemcpy(d_array, array, array_len * sizeof(ELEMENT_TYPE), cudaMemcpyHostToDevice);
+    // Initialisation de l'histogramme GPU à zéro
+    cudaMemset(d_histogram, 0, nb_bins * sizeof(int));
+
+    // 3. Configuration et Lancement du Kernel
+    int num_blocks = (array_len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    
+    // Si le nombre de bins est supérieur à la taille du bloc (BLOCK_SIZE),
+    // nous devons nous assurer que SHARED_HISTOGRAM_SIZE est suffisant.
+    // Ici, nous utilisons la taille exacte requise pour l'histogramme partiel
+    // comme taille de mémoire partagée dynamique.
+    size_t shmem_size = nb_bins * sizeof(int);
+
+    // Attention : La mémoire partagée est limitée (typiquement 48KB/SM ou 96KB/SM).
+    // Si shmem_size est trop grand, le kernel échouera.
+    // Dans ce cas, il faut passer à une approche 'tiling' (gérer plusieurs bins par bloc).
+    // Pour cet exemple, nous supposons que nb_bins est raisonnable.
+    if (shmem_size > 48 * 1024) {
+        fprintf(stderr, "Warning: Shared memory size (%zu bytes) is very large. Kernel might fail.\n", shmem_size);
+    }
+    
+    // Lancement du kernel avec mémoire partagée dynamique
+    compute_histogram_kernel<<<num_blocks, BLOCK_SIZE, shmem_size>>>(d_array, d_histogram, array_len, nb_bins, lower_bound, bin_width);
+    cudaGetLastError();
+
+    // 4. Copie des données Device -> Host
+    cudaMemcpy(histogram, d_histogram, nb_bins * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // 5. Libération de la mémoire GPU
+    cudaFree(d_array);
+    cudaFree(d_histogram);
 }
 
 static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings *p_settings)
 {
-        naive_compute_histogram(array, run_histogram, p_settings);
+        cuda_compute_histogram(array, run_histogram, p_settings);
 
         if (p_settings->enable_output)
         {
@@ -425,9 +471,11 @@ static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings
         }
 }
 
+
+
 static int check(const ELEMENT_TYPE *array, int *check_histogram, const int *run_histogram, struct s_settings *p_settings)
 {
-        naive_compute_histogram(array, check_histogram, p_settings);
+        cuda_compute_histogram(array, check_histogram, p_settings);
 
         if (p_settings->enable_output)
         {
