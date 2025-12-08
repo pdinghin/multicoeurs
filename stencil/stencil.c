@@ -462,7 +462,7 @@ void copy_stencil_cpu_func(void * buffers [],void * cl_arg)
 static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
         
-
+        printf("test 1\n");
         const int margin_x = (STENCIL_WIDTH - 1) / 2;
         const int margin_y = (STENCIL_HEIGHT - 1) / 2;
         int x;
@@ -479,9 +479,9 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
         struct starpu_codelet stencil_cl ={
                 .cpu_funcs = {stencil_cpu_func},
                 .nbuffers = 3,
-                .modes = {STARPU_R,STARPU_W,STARPU_R},
+                .modes = {STARPU_RW,STARPU_RW,STARPU_R},
         };
-
+        printf("test 2\n");
         for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
         {
                 for (x = margin_x; x < p_settings->mesh_width - margin_x; x++)
@@ -493,8 +493,10 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
                         parameters->mesh_width = p_settings->mesh_width;
                         parameters->stencil_height = STENCIL_HEIGHT;
                         parameters->stencil_widht = STENCIL_WIDTH;
-                        starpu_task_insert(&stencil_cl,STARPU_R,p_mesh_handle,STARPU_W,p_temporary_mesh_handle,STARPU_R,
+                        printf("test 3\n");
+                        starpu_task_insert(&stencil_cl,STARPU_RW,p_mesh_handle,STARPU_RW,p_temporary_mesh_handle,STARPU_R,
                                 stencil_coefs_handle,STARPU_VALUE,&parameters,sizeof(parameters),0);
+                        printf("test 4\n");
                 }
         }
 
@@ -503,16 +505,16 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
         struct starpu_codelet copy_stencil_cl={
                 .cpu_funcs = {copy_stencil_cpu_func},
                 .nbuffers = 2,
-                .modes = {STARPU_W,STARPU_R},
+                .modes = {STARPU_RW,STARPU_RW},
         };
-
+        printf("test 5\n");
         for (y = margin_y; y < p_settings->mesh_height - margin_y; y++)
         {
                 struct starpu_parameters * parameters ; 
                 parameters->actual_x = margin_x;
                 parameters->actual_y = y;
                 parameters->mesh_width = p_settings->mesh_width;
-                starpu_task_insert(&copy_stencil_cl,STARPU_W,p_mesh_handle,STARPU_R,p_temporary_mesh_handle,
+                starpu_task_insert(&copy_stencil_cl,STARPU_RW,p_mesh_handle,STARPU_RW,p_temporary_mesh_handle,
                         STARPU_VALUE,&parameters,sizeof(parameters),0);
                 
         }
