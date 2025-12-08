@@ -467,7 +467,6 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
         const int margin_y = (STENCIL_HEIGHT - 1) / 2;
         int x;
         int y;
-        int stencil_x, stencil_y;
         ELEMENT_TYPE *p_temporary_mesh = malloc(p_settings->mesh_width * p_settings->mesh_height * sizeof(*p_mesh));
         int ret = starpu_init(NULL);
         STARPU_CHECK_RETURN_VALUE(ret,"starpu_init");
@@ -515,6 +514,7 @@ static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_setti
                 starpu_task_insert(&copy_stencil_cl,STARPU_W,p_mesh_handle,STARPU_R,p_temporary_mesh_handle,&parameters,sizeof(struct starpu_parameters),0);
                 
         }
+        starpu_task_wait_for_all();
         starpu_data_unregister(p_mesh_handle);
         starpu_data_unregister(p_temporary_mesh_handle);
         
