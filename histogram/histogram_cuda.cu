@@ -19,7 +19,9 @@
 #define MAX_DISPLAY_COLUMNS 10
 #define MAX_DISPLAY_ROWS 20
 
-#define BLOCK_SIZE 256
+#ifndef BLOCK_SIZE
+        #define BLOCK_SIZE 256
+#endif
 
 struct s_settings
 {
@@ -404,45 +406,28 @@ static void cuda_compute_histogram(const ELEMENT_TYPE *array, int *histogram, st
     ELEMENT_TYPE lower_bound = (ELEMENT_TYPE)p_settings->lower_bound;
     ELEMENT_TYPE upper_bound = (ELEMENT_TYPE)p_settings->upper_bound;
 
-    // Calcul de la largeur de la bin
     ELEMENT_TYPE bin_width = (upper_bound - lower_bound) / (ELEMENT_TYPE)nb_bins;
 
-    // 1. Allocation mémoire GPU (Device)
     ELEMENT_TYPE *d_array = NULL;
     int *d_histogram = NULL;
     cudaMalloc((void **)&d_array, array_len * sizeof(ELEMENT_TYPE));
     cudaMalloc((void **)&d_histogram, nb_bins * sizeof(int));
 
-    // 2. Copie des données Host -> Device
     cudaMemcpy(d_array, array, array_len * sizeof(ELEMENT_TYPE), cudaMemcpyHostToDevice);
-    // Initialisation de l'histogramme GPU à zéro
     cudaMemset(d_histogram, 0, nb_bins * sizeof(int));
 
-    // 3. Configuration et Lancement du Kernel
     int num_blocks = (array_len + BLOCK_SIZE - 1) / BLOCK_SIZE;
     
-    // Si le nombre de bins est supérieur à la taille du bloc (BLOCK_SIZE),
-    // nous devons nous assurer que SHARED_HISTOGRAM_SIZE est suffisant.
-    // Ici, nous utilisons la taille exacte requise pour l'histogramme partiel
-    // comme taille de mémoire partagée dynamique.
     size_t shmem_size = nb_bins * sizeof(int);
 
-    // Attention : La mémoire partagée est limitée (typiquement 48KB/SM ou 96KB/SM).
-    // Si shmem_size est trop grand, le kernel échouera.
-    // Dans ce cas, il faut passer à une approche 'tiling' (gérer plusieurs bins par bloc).
-    // Pour cet exemple, nous supposons que nb_bins est raisonnable.
     if (shmem_size > 48 * 1024) {
         fprintf(stderr, "Warning: Shared memory size (%zu bytes) is very large. Kernel might fail.\n", shmem_size);
     }
     
-    // Lancement du kernel avec mémoire partagée dynamique
     compute_histogram_kernel<<<num_blocks, BLOCK_SIZE, shmem_size>>>(d_array, d_histogram, array_len, nb_bins, lower_bound, bin_width);
-    cudaGetLastError();
 
-    // 4. Copie des données Device -> Host
     cudaMemcpy(histogram, d_histogram, nb_bins * sizeof(int), cudaMemcpyDeviceToHost);
 
-    // 5. Libération de la mémoire GPU
     cudaFree(d_array);
     cudaFree(d_histogram);
 }

@@ -15,7 +15,7 @@ OMP_CFLAGS = -fopenmp
 OMP_LDLIBS = -fopenmp
 
 NVCC = nvcc
-NVCCFLAGS = -g -O3 -arch=sm_75
+NVCCFLAGS = -g -O3 -arch=sm_86
 CUDALDLIB = -lcudart -lm
 
 .phony: all clean
