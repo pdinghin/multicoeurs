@@ -16,12 +16,11 @@ ARRAY_LENGTHS = [
     10**4,
     10**5,
     10**6,
-    10**7,
-    10**8     
+    10**7    
 ]
 
 NB_BINS = 1024
-NB_REPEAT = 6 
+NB_REPEAT = 6
 
 OUTPUT_FILENAME = "./perf/benchmark_results.csv"
 
@@ -112,7 +111,7 @@ def main():
             
             if avg_time is not None:
                 current_result[name] = avg_time
-                print(f"  -> Temps moyen (5 runs mesurés): {avg_time:.6f} secondes")
+                print(f"  -> Temps moyen (10 runs mesurés): {avg_time:.6f} secondes")
             else:
                 current_result[name] = "N/A"
                 

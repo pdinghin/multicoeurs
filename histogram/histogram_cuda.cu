@@ -20,7 +20,7 @@
 #define MAX_DISPLAY_ROWS 20
 
 #ifndef BLOCK_SIZE
-        #define BLOCK_SIZE 256
+        #define BLOCK_SIZE 1024
 #endif
 
 struct s_settings
@@ -399,42 +399,57 @@ __global__ void compute_histogram_kernel(const ELEMENT_TYPE *d_array, int *d_his
         }
 }
 
-static void cuda_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
+static double cuda_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
 {
     int array_len = p_settings->array_len;
     int nb_bins = p_settings->nb_bins;
     ELEMENT_TYPE lower_bound = (ELEMENT_TYPE)p_settings->lower_bound;
     ELEMENT_TYPE upper_bound = (ELEMENT_TYPE)p_settings->upper_bound;
-
     ELEMENT_TYPE bin_width = (upper_bound - lower_bound) / (ELEMENT_TYPE)nb_bins;
+    int num_blocks = (array_len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    size_t shmem_size = nb_bins * sizeof(int);
 
     ELEMENT_TYPE *d_array = NULL;
     int *d_histogram = NULL;
+
+    cudaEvent_t start, stop;
+    float milliseconds = 0;
+    
     cudaMalloc((void **)&d_array, array_len * sizeof(ELEMENT_TYPE));
     cudaMalloc((void **)&d_histogram, nb_bins * sizeof(int));
+
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
 
     cudaMemcpy(d_array, array, array_len * sizeof(ELEMENT_TYPE), cudaMemcpyHostToDevice);
     cudaMemset(d_histogram, 0, nb_bins * sizeof(int));
 
-    int num_blocks = (array_len + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    
-    size_t shmem_size = nb_bins * sizeof(int);
-
-    if (shmem_size > 48 * 1024) {
-        fprintf(stderr, "Warning: Shared memory size (%zu bytes) is very large. Kernel might fail.\n", shmem_size);
-    }
     
     compute_histogram_kernel<<<num_blocks, BLOCK_SIZE, shmem_size>>>(d_array, d_histogram, array_len, nb_bins, lower_bound, bin_width);
+    
+    cudaGetLastError(); 
 
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    
     cudaMemcpy(histogram, d_histogram, nb_bins * sizeof(int), cudaMemcpyDeviceToHost);
+    
 
     cudaFree(d_array);
     cudaFree(d_histogram);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    return milliseconds/1000.0;
 }
 
-static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings *p_settings)
+static double run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings *p_settings)
 {
-        cuda_compute_histogram(array, run_histogram, p_settings);
+        double t = cuda_compute_histogram(array, run_histogram, p_settings);
 
         if (p_settings->enable_output)
         {
@@ -454,13 +469,56 @@ static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings
                 print_histogram(run_histogram, p_settings);
                 printf("\n\n");
         }
+
+        return t;
 }
 
+static void naive_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
+{
+        memset(histogram, 0, p_settings->nb_bins * sizeof(*histogram));
 
+        ELEMENT_TYPE *bounds = NULL;
+        bounds = (ELEMENT_TYPE *)malloc((p_settings->nb_bins + 1) * sizeof(*bounds));
+        if (bounds == NULL)
+        {
+                PRINT_ERROR("memory allocation failed");
+        }
+
+        {
+                const ELEMENT_TYPE offset = p_settings->lower_bound;
+                const ELEMENT_TYPE scale = p_settings->upper_bound - p_settings->lower_bound;
+
+                bounds[0] = offset;
+
+                int j;
+                for (j = 0; j < p_settings->nb_bins; j++)
+                {
+                        bounds[j + 1] = offset + (j + 1) * scale / p_settings->nb_bins;
+                }
+        }
+
+        int i;
+        for (i = 0; i < p_settings->array_len; i++)
+        {
+                ELEMENT_TYPE value = array[i];
+
+                int j;
+                for (j = 0; j < p_settings->nb_bins; j++)
+                {
+                        if (value >= bounds[j] && value < bounds[j + 1])
+                        {
+                                histogram[j]++;
+                                break;
+                        }
+                }
+        }
+
+        free(bounds);
+}
 
 static int check(const ELEMENT_TYPE *array, int *check_histogram, const int *run_histogram, struct s_settings *p_settings)
 {
-        cuda_compute_histogram(array, check_histogram, p_settings);
+        naive_compute_histogram(array, check_histogram, p_settings);
 
         if (p_settings->enable_output)
         {
@@ -558,11 +616,8 @@ int main(int argc, char *argv[])
                                 printf("\n\n");
                         }
 
-                        struct timespec timing_start, timing_end;
-                        clock_gettime(CLOCK_MONOTONIC, &timing_start);
                         run(array, histogram, p_settings);
-                        clock_gettime(CLOCK_MONOTONIC, &timing_end);
-                        double timing_in_seconds = (timing_end.tv_sec - timing_start.tv_sec) + 1.0e-9 * (timing_end.tv_nsec - timing_start.tv_nsec);
+                        double timing_in_seconds = run(array, histogram, p_settings);
 
                         int check_status = check(array, check_histogram, histogram, p_settings);
 

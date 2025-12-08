@@ -59,7 +59,7 @@ def create_inverted_block_size_graph(input_file, output_file):
 
     plt.tight_layout()
     plt.savefig(output_file)
-    print(f"\n✅ Graphique inversé sauvegardé sous : {output_file}")
+    print(f"\n✅ Graphique sauvegardé sous : {output_file}")
     
 if __name__ == "__main__":
     create_inverted_block_size_graph(INPUT_FILENAME, OUTPUT_GRAPH_FILENAME)
