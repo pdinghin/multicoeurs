@@ -421,7 +421,7 @@ void stencil_func_v2(float * mesh,float * temporary,float * coefs,struct starpu_
                         for (stencil_x = 0; stencil_x < parameters.stencil_widht; stencil_x++)
                         {
                                 value +=
-                                        mesh[(parameters.actual_y + stencil_y - margin_y) * parameters.mesh_width + (parameters.actual_x + stencil_x - margin_x)]
+                                        mesh[(parameters.actual_y + stencil_y - margin_y) * parameters.mesh_width + (x + stencil_x - margin_x)]
                                         * coefs[stencil_y * parameters.stencil_widht + stencil_x];
                         }
                 }
