@@ -608,7 +608,7 @@ static void starpu_stencil_func_big_tasks_v2(ELEMENT_TYPE *p_mesh, struct s_sett
             STARPU_VALUE, &params, sizeof(params),
             0);
 
-        
+        starpu_task_wait_for_all();
         starpu_task_insert(&copy_cl,
             STARPU_W, mesh_sub,
             STARPU_R, tmp_sub,
