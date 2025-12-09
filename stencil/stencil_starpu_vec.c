@@ -589,8 +589,6 @@ static void starpu_vec_stencil_func_v2(ELEMENT_TYPE *p_mesh, struct s_settings *
         int block_end = block_start + block_height;
         if (t == nb_threads - 1) block_end = mesh_h - margin_y; 
 
-        if (block_start >= block_end) continue; 
-
       
         starpu_data_handle_t mesh_sub = starpu_data_get_sub_data(mesh_handle, 1, t);
         starpu_data_handle_t tmp_sub  = starpu_data_get_sub_data(temporary_handle, 1, t);
