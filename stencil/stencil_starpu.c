@@ -909,7 +909,7 @@ static void run(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
         int i;
         for (i = 0; i < p_settings->nb_iterations; i++)
         {
-                starpu_stencil_func_v2_partitioned(p_mesh, p_settings);
+                starpu_stencil_func_v2_big_tasks(p_mesh, p_settings);
 
                 if (p_settings->enable_output)
                 {
