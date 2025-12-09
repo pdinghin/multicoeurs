@@ -69,6 +69,7 @@ def run_benchmark(executable, array_len, nb_bins, nb_repeat):
             
         warm_up_time = timings[0]
         measured_timings = timings[1:]
+        print(measured_timings)
         
         
         if check_failures > 0:
@@ -92,7 +93,7 @@ def run_benchmark(executable, array_len, nb_bins, nb_repeat):
         return None, 1
 
 def main():
-    print("🚀 Début de l'évaluation avec pré-chauffage (Warm-up).")
+    print("Début de l'évaluation avec pré-chauffage (Warm-up).")
     print(f"-> Chaque test est répété {NB_REPEAT} fois. La première mesure est ignorée.")
     
     all_results = []
@@ -111,7 +112,7 @@ def main():
             
             if avg_time is not None:
                 current_result[name] = avg_time
-                print(f"  -> Temps moyen (10 runs mesurés): {avg_time:.6f} secondes")
+                print(f"  -> Temps moyen (5 runs mesurés): {avg_time:.6f} secondes")
             else:
                 current_result[name] = "N/A"
                 
