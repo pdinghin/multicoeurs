@@ -1,134 +1,115 @@
 import subprocess
-import csv
+import pandas as pd
 import io
-import time
+import re
+from typing import List, Dict, Any
 
+EXECUTABLES: List[str] = ["./histogram", "./histogram_omp", "./histogram_cuda"]
 
-EXECUTABLES = {
-    "CPU_Seq": "./histogram",
-    "CPU_OMP": "./histogram_omp",
-    "GPU_CUDA": "./histogram_cuda"
-}
-
-ARRAY_LENGTHS = [
-    10**2,
+ARRAY_LENS: List[int] = [10**2,
     10**3,
     10**4,
     10**5,
     10**6,
-    10**7    
-]
+    10**7]
 
-NB_BINS = 1024
-NB_REPEAT = 6
+NB_BINS: int = 5
+NB_REPEAT: int = 10
+OUTPUT_CSV_FILE: str = "./perf/benchmark_results.csv"
 
-OUTPUT_FILENAME = "./perf/benchmark_results.csv"
-
-
-def run_benchmark(executable, array_len, nb_bins, nb_repeat):
+def run_program_and_parse(executable: str, array_len: int, nb_bins: int, nb_repeat: int) -> pd.DataFrame:
     """
-    Exécute un programme, retourne le temps moyen des (nb_repeat - 1) dernières itérations.
+    Exécute un programme avec les paramètres donnés et retourne ses données de timing sous forme de DataFrame.
     """
-    command = [
+    print(f"-> Exécution de {executable} avec --array-len {array_len}...")
+    
+    command: List[str] = [
         executable,
-        "--array-len", str(array_len),
-        "--nb-bins", str(nb_bins),
-        "--nb-repeat", str(nb_repeat)
+        f"--array-len", str(array_len),
+        f"--nb-bins", str(nb_bins),
+        f"--nb-repeat", str(nb_repeat)
     ]
     
-    print(f"  -> Exécution: {' '.join(command)}")
-
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
+        result: subprocess.CompletedProcess = subprocess.run(
+            command, 
+            capture_output=True, 
+            text=True, 
             check=True
         )
         
-        csv_data = result.stdout.strip()
-        f = io.StringIO(csv_data)
-        reader = csv.DictReader(f)
+        output_data: str = result.stdout.strip()
         
-        timings = []
-        check_failures = 0
+        if not output_data or len(output_data.split('\n')) <= 1:
+            print(f"   [AVERTISSEMENT] Aucune donnée de timing valide n'a été trouvée pour {executable} (len={array_len}).")
+            return pd.DataFrame()
 
-        for row in reader:
-            try:
-                timing = float(row['timing'])
-                timings.append(timing)
-                
-                if int(row['check_status']) != 0:
-                    check_failures += 1
-            except (ValueError, KeyError):
-                continue 
-
-        if not timings or len(timings) < nb_repeat:
-            print(f"    [ATTENTION] Seulement {len(timings)} temps trouvés. Attendu: {nb_repeat}.")
-            return None, 0
-            
-        warm_up_time = timings[0]
-        measured_timings = timings[1:]
-        print(measured_timings)
+        df: pd.DataFrame = pd.read_csv(io.StringIO(output_data))
         
+        df['executable'] = executable
         
-        if check_failures > 0:
-            print(f"    [ÉCHEC] {check_failures} répétitions ont échoué à la vérification.")
-            
-        avg_time = sum(measured_timings) / len(measured_timings)
+        return df
         
-        print(f"    [Warm-up] Temps du premier run (ignoré): {warm_up_time:.6f} s")
-
-        return avg_time, check_failures
-
     except subprocess.CalledProcessError as e:
-        print(f"    [ERREUR] Programme '{executable}' a retourné le code {e.returncode}.")
-        print(f"    Sortie d'erreur (stderr):\n{e.stderr}")
-        return None, 1
-    except subprocess.TimeoutExpired:
-        print(f"    [TIMEOUT] Le programme a dépassé le temps maximum alloué.")
-        return None, 1
+        print(f"   [ERREUR] Échec de l'exécution de {executable} (len={array_len}). Code d'erreur: {e.returncode}")
+        print(f"   Stderr: {e.stderr.strip()}")
+        return pd.DataFrame()
     except FileNotFoundError:
-        print(f"    [ERREUR] Exécutable '{executable}' non trouvé. Assurez-vous d'avoir fait 'make'.")
-        return None, 1
+        print(f"   [ERREUR] Le programme {executable} est introuvable. Assurez-vous que le chemin est correct.")
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"   [ERREUR] Une erreur inattendue s'est produite lors du traitement de {executable}: {e}")
+        return pd.DataFrame()
 
 def main():
-    print("Début de l'évaluation avec pré-chauffage (Warm-up).")
-    print(f"-> Chaque test est répété {NB_REPEAT} fois. La première mesure est ignorée.")
+    """
+    Fonction principale pour orchestrer les tests, l'analyse et l'enregistrement CSV.
+    """
+    all_data: List[pd.DataFrame] = []
+
+    print("--- ⏱️ Début de la comparaison des performances ---")
+
+    for array_len in ARRAY_LENS:
+        for executable in EXECUTABLES:
+            df_timing = run_program_and_parse(executable, array_len, NB_BINS, NB_REPEAT)
+            if not df_timing.empty:
+                all_data.append(df_timing)
+
+    if not all_data:
+        print("\n[FIN] Aucune donnée n'a été collectée. Veuillez vérifier les chemins et les permissions des exécutables.")
+        return
+        
+    raw_df: pd.DataFrame = pd.concat(all_data, ignore_index=True)
     
-    all_results = []
-    fieldnames = ['array_len'] + list(EXECUTABLES.keys())
+    print("\n--- 📊 Analyse des données de timing ---")
 
-    for array_len in ARRAY_LENGTHS:
-        print(f"\n--- Taille du Tableau: {array_len:,} ---")
-        
-        current_result = {'array_len': array_len}
-        
-        for name, executable in EXECUTABLES.items():
-            
-            print(f"  [MODE: {name}]")
-            
-            avg_time, failures = run_benchmark(executable, array_len, NB_BINS, NB_REPEAT)
-            
-            if avg_time is not None:
-                current_result[name] = avg_time
-                print(f"  -> Temps moyen (5 runs mesurés): {avg_time:.6f} secondes")
-            else:
-                current_result[name] = "N/A"
-                
-            time.sleep(1) 
-            
-        all_results.append(current_result)
+    filtered_df: pd.DataFrame = raw_df[raw_df['rep'] != 0].copy()
 
-    try:
-        with open(OUTPUT_FILENAME, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(all_results)
-        
-        print(f"\nTerminé. Résultats sauvegardés dans {OUTPUT_FILENAME}")
-    except Exception as e:
-        print(f"\n[FATAL] Erreur lors de l'écriture du fichier CSV: {e}")
+    filtered_df['timing'] = pd.to_numeric(filtered_df['timing'])
+    
+    average_performance: pd.DataFrame = filtered_df.groupby(['executable', 'array_len']).agg(
+        average_timing=('timing', 'mean'),
+        nb_bins=('nb_bins', 'first'),
+        nb_repeat=('nb_repeat', 'first')
+    ).reset_index()
+
+    final_df: pd.DataFrame = average_performance[[
+        'executable', 
+        'array_len', 
+        'nb_bins', 
+        'nb_repeat', 
+        'average_timing'
+    ]]
+    
+    final_df.rename(columns={'array_len': 'input_size'}, inplace=True)
+
+    final_df.to_csv(OUTPUT_CSV_FILE, index=False)
+
+    print(f"\n--- Succès ---")
+    print(f"Les résultats de performance moyenne ont été enregistrés dans **{OUTPUT_CSV_FILE}**.")
+    print("\nAperçu des résultats finaux (les 5 premières lignes) :")
+    print(final_df.head().to_markdown(index=False, numalign="left"))
+
 
 if __name__ == "__main__":
     main()

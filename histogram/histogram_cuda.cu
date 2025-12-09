@@ -369,13 +369,11 @@ __global__ void compute_histogram_kernel(const ELEMENT_TYPE *d_array, int *d_his
                                                        ELEMENT_TYPE bin_width)
 {
     extern __shared__ int s_hist[];
-
     for (int j = threadIdx.x; j < nb_bins; j += blockDim.x)
     {
         s_hist[j] = 0;
     }
     __syncthreads();
-
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < array_len)
     {
@@ -390,9 +388,7 @@ __global__ void compute_histogram_kernel(const ELEMENT_TYPE *d_array, int *d_his
 
         i += gridDim.x * blockDim.x;
     }
-
     __syncthreads();
-
     for (int j = threadIdx.x; j < nb_bins; j += blockDim.x)
     {
             atomicAdd(&d_histogram[j], s_hist[j]);
