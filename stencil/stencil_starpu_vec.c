@@ -602,7 +602,7 @@ static void starpu_stencil_func_big_tasks_v2(ELEMENT_TYPE *p_mesh, struct s_sett
         params.stencil_height = STENCIL_HEIGHT;
 
         starpu_task_insert(&stencil_cl,
-            STARPU_R, mesh_handle,   
+            STARPU_R, mesh_sub,   
             STARPU_W, tmp_sub,        
             STARPU_R, coef_handle,
             STARPU_VALUE, &params, sizeof(params),
