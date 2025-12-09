@@ -531,8 +531,11 @@ void copy_block_cpu_func(void *buffers[], void *cl_arg) {
 
 
 
-
-static void starpu_stencil_func_big_tasks_v2(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
+/**
+ * Fonction non fonctionnelle
+ * L'objectif était de faire du partitionnement mais la fonction n'est pas finis d'implémenter.
+ */
+static void starpu_vec_stencil_func_v2(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
     const int mesh_w = p_settings->mesh_width;
     const int mesh_h = p_settings->mesh_height;
@@ -633,7 +636,8 @@ static void starpu_stencil_func_big_tasks_v2(ELEMENT_TYPE *p_mesh, struct s_sett
     free(p_temporary_mesh);
 }
 
-static void starpu_stencil_func_big_tasks(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
+/**Fonction qui utilise la version grosse tache de la partie starpu et ajoute les calculs vectoriels */
+static void starpu_vec_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
     const int mesh_w = p_settings->mesh_width;
     const int mesh_h = p_settings->mesh_height;
@@ -729,7 +733,7 @@ static void run(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
         int i;
         for (i = 0; i < p_settings->nb_iterations; i++)
         {
-                starpu_stencil_func_big_tasks_v2(p_mesh, p_settings);
+                starpu_vec_stencil_func(p_mesh, p_settings);
 
                 if (p_settings->enable_output)
                 {
