@@ -112,7 +112,6 @@ def main():
     
     executables_created = {}
     
-    # 1. Compilation de toutes les versions
     for bs in BLOCK_SIZES:
         exe_path = compile_cuda(bs)
         if exe_path:
@@ -122,10 +121,8 @@ def main():
         print("\nAucun exécutable CUDA n'a pu être compilé. Arrêt du benchmark.")
         return
 
-    # 2. Exécution des tests et stockage des résultats
     all_results = []
     
-    # En-têtes du fichier de sortie : Taille du Tableau + une colonne par taille de bloc
     fieldnames = ['array_len'] + [f"BS_{bs}" for bs in BLOCK_SIZES]
 
     for array_len in ARRAY_LENGTHS:
@@ -141,7 +138,6 @@ def main():
                 
                 current_result[f"BS_{bs}"] = avg_time
                 
-                # Petite pause pour stabiliser le GPU entre les tests
                 time.sleep(0.5) 
             else:
                 current_result[f"BS_{bs}"] = "Compil. Error"
