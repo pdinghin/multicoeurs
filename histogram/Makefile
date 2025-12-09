@@ -15,7 +15,7 @@ OMP_CFLAGS = -fopenmp
 OMP_LDLIBS = -fopenmp
 
 NVCC = nvcc
-NVCCFLAGS = -g -O3 -arch=sm_86
+NVCCFLAGS = -g -O3 -arch=sm_86 #archi gpu cremi
 CUDALDLIB = -lcudart -lm
 
 .phony: all clean
