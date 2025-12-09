@@ -5,6 +5,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <cuda_runtime.h>
+#include <cuda.h>
 
 #define ELEMENT_TYPE float
 
@@ -16,6 +18,10 @@
 
 #define MAX_DISPLAY_COLUMNS 10
 #define MAX_DISPLAY_ROWS 20
+
+#ifndef BLOCK_SIZE
+        #define BLOCK_SIZE 1024
+#endif
 
 struct s_settings
 {
@@ -61,7 +67,7 @@ static void usage(void)
 static void init_settings(struct s_settings **pp_settings)
 {
         assert(*pp_settings == NULL);
-        struct s_settings *p_settings = calloc(1, sizeof(*p_settings));
+        struct s_settings *p_settings = (struct s_settings *)calloc(1, sizeof(*p_settings));
         if (p_settings == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -120,8 +126,8 @@ static void parse_cmd_line(int argc, char *argv[], struct s_settings *p_settings
                                 usage();
                         }
                         float value = atof(argv[i]);
-                        int class = fpclassify(value);
-                        if ((class != FP_NORMAL) && (class != FP_ZERO))
+                        int classs = fpclassify(value);
+                        if ((classs != FP_NORMAL) && (classs != FP_ZERO))
                         {
                                 fprintf(stderr, "invalid LOWER_BOUND argument\n");
                                 exit(EXIT_FAILURE);
@@ -136,8 +142,8 @@ static void parse_cmd_line(int argc, char *argv[], struct s_settings *p_settings
                                 usage();
                         }
                         float value = atof(argv[i]);
-                        int class = fpclassify(value);
-                        if ((class != FP_NORMAL) && (class != FP_ZERO))
+                        int classs = fpclassify(value);
+                        if ((classs != FP_NORMAL) && (classs != FP_ZERO))
                         {
                                 fprintf(stderr, "invalid UPPER_BOUND argument\n");
                                 exit(EXIT_FAILURE);
@@ -197,7 +203,7 @@ static void delete_settings(struct s_settings **pp_settings)
 static void allocate_array(ELEMENT_TYPE **p_array, struct s_settings *p_settings)
 {
         assert(*p_array == NULL);
-        ELEMENT_TYPE *array = calloc(p_settings->array_len, sizeof(*array));
+        ELEMENT_TYPE *array = (ELEMENT_TYPE *)calloc(p_settings->array_len, sizeof(*array));
         if (array == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -268,7 +274,7 @@ static void write_array_to_file(FILE *file, const ELEMENT_TYPE *array, struct s_
 static void allocate_histogram(int **p_histogram, struct s_settings *p_settings)
 {
         assert(*p_histogram == NULL);
-        int *histogram = calloc(p_settings->nb_bins, sizeof(*histogram));
+        int *histogram = (int *)calloc(p_settings->nb_bins, sizeof(*histogram));
         if (histogram == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -358,12 +364,117 @@ static void print_csv_header(void)
         printf("\n");
 }
 
+__global__ void compute_histogram_kernel(const ELEMENT_TYPE *d_array, int *d_histogram,
+                                                       int array_len, int nb_bins, ELEMENT_TYPE lower_bound,
+                                                       ELEMENT_TYPE bin_width)
+{
+    extern __shared__ int s_hist[];
+    for (int j = threadIdx.x; j < nb_bins; j += blockDim.x)
+    {
+        s_hist[j] = 0;
+    }
+    __syncthreads();
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < array_len)
+    {
+        ELEMENT_TYPE value = d_array[i];
+
+        int bin_index = (int)((value - lower_bound) / bin_width);
+
+        if (bin_index >= 0 && bin_index < nb_bins)
+        {
+            atomicAdd(&s_hist[bin_index], 1);
+        }
+
+        i += gridDim.x * blockDim.x;
+    }
+    __syncthreads();
+    for (int j = threadIdx.x; j < nb_bins; j += blockDim.x)
+    {
+            atomicAdd(&d_histogram[j], s_hist[j]);
+        }
+}
+
+static double cuda_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
+{
+    int array_len = p_settings->array_len;
+    int nb_bins = p_settings->nb_bins;
+    ELEMENT_TYPE lower_bound = (ELEMENT_TYPE)p_settings->lower_bound;
+    ELEMENT_TYPE upper_bound = (ELEMENT_TYPE)p_settings->upper_bound;
+    ELEMENT_TYPE bin_width = (upper_bound - lower_bound) / (ELEMENT_TYPE)nb_bins;
+    int num_blocks = (array_len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    size_t shmem_size = nb_bins * sizeof(int);
+
+    ELEMENT_TYPE *d_array = NULL;
+    int *d_histogram = NULL;
+
+    cudaEvent_t start, stop;
+    float milliseconds = 0;
+    
+    cudaMalloc((void **)&d_array, array_len * sizeof(ELEMENT_TYPE));
+    cudaMalloc((void **)&d_histogram, nb_bins * sizeof(int));
+
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
+
+    cudaMemcpy(d_array, array, array_len * sizeof(ELEMENT_TYPE), cudaMemcpyHostToDevice);
+    cudaMemset(d_histogram, 0, nb_bins * sizeof(int));
+
+    
+    compute_histogram_kernel<<<num_blocks, BLOCK_SIZE, shmem_size>>>(d_array, d_histogram, array_len, nb_bins, lower_bound, bin_width);
+    
+    cudaGetLastError(); 
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    
+    cudaMemcpy(histogram, d_histogram, nb_bins * sizeof(int), cudaMemcpyDeviceToHost);
+    
+
+    cudaFree(d_array);
+    cudaFree(d_histogram);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    return milliseconds/1000.0;
+}
+
+static double run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings *p_settings)
+{
+        double t = cuda_compute_histogram(array, run_histogram, p_settings);
+
+        if (p_settings->enable_output)
+        {
+                FILE *file = fopen("run_histogram.csv", "w");
+                if (file == NULL)
+                {
+                        perror("fopen");
+                        exit(EXIT_FAILURE);
+                }
+                write_histogram_to_file(file, run_histogram, p_settings);
+                fclose(file);
+        }
+
+        if (p_settings->enable_verbose)
+        {
+                printf("run histogram:\n");
+                print_histogram(run_histogram, p_settings);
+                printf("\n\n");
+        }
+
+        return t;
+}
+
 static void naive_compute_histogram(const ELEMENT_TYPE *array, int *histogram, struct s_settings *p_settings)
 {
         memset(histogram, 0, p_settings->nb_bins * sizeof(*histogram));
 
         ELEMENT_TYPE *bounds = NULL;
-        bounds = malloc((p_settings->nb_bins + 1) * sizeof(*bounds));
+        bounds = (ELEMENT_TYPE *)malloc((p_settings->nb_bins + 1) * sizeof(*bounds));
         if (bounds == NULL)
         {
                 PRINT_ERROR("memory allocation failed");
@@ -399,30 +510,6 @@ static void naive_compute_histogram(const ELEMENT_TYPE *array, int *histogram, s
         }
 
         free(bounds);
-}
-
-static void run(const ELEMENT_TYPE *array, int *run_histogram, struct s_settings *p_settings)
-{
-        naive_compute_histogram(array, run_histogram, p_settings);
-
-        if (p_settings->enable_output)
-        {
-                FILE *file = fopen("run_histogram.csv", "w");
-                if (file == NULL)
-                {
-                        perror("fopen");
-                        exit(EXIT_FAILURE);
-                }
-                write_histogram_to_file(file, run_histogram, p_settings);
-                fclose(file);
-        }
-
-        if (p_settings->enable_verbose)
-        {
-                printf("run histogram:\n");
-                print_histogram(run_histogram, p_settings);
-                printf("\n\n");
-        }
 }
 
 static int check(const ELEMENT_TYPE *array, int *check_histogram, const int *run_histogram, struct s_settings *p_settings)
@@ -525,11 +612,8 @@ int main(int argc, char *argv[])
                                 printf("\n\n");
                         }
 
-                        struct timespec timing_start, timing_end;
-                        clock_gettime(CLOCK_MONOTONIC, &timing_start);
                         run(array, histogram, p_settings);
-                        clock_gettime(CLOCK_MONOTONIC, &timing_end);
-                        double timing_in_seconds = (timing_end.tv_sec - timing_start.tv_sec) + 1.0e-9 * (timing_end.tv_nsec - timing_start.tv_nsec);
+                        double timing_in_seconds = run(array, histogram, p_settings);
 
                         int check_status = check(array, check_histogram, histogram, p_settings);
 
