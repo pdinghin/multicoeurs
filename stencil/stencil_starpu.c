@@ -466,6 +466,9 @@ void copy_stencil_cpu_func(void * buffers [],void * cl_arg)
         copy_stencil_func(vector_mesh,vector_temporary,parameters);  
 }
 
+/**
+ * Cette fonction utilise starpu en envoyant une tache par ligne mais pour chaques taches tout le tableau mesh et temporary sont utilisés.
+ */
 
 static void starpu_stencil_func_v2(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
@@ -561,6 +564,11 @@ void stencil_cpu_func(void * buffers [], void * cl_arg)
 }
 
 
+
+/**
+ * Cette fonction utilise starpu en créant une tache par indice du tableau a calculer ce qui n'est pas du tout optimal mais c'est un peu la fonction naive
+ * de starpu.
+ */
 static void starpu_stencil_func(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
         
@@ -701,55 +709,14 @@ void stencil_cpu_func_partitioned(void *buffers[], void *cl_arg) {
     }
 }
 
-void copy_line_cpu_func(void *buffers[], void *cl_arg) {
-    struct starpu_vector_interface *mesh_handle = buffers[0]; 
-    float * mesh = (float *)STARPU_VECTOR_GET_PTR(mesh_handle);
-
-    struct starpu_vector_interface *temporary_handle = buffers[1];  
-    float * temporary = (float *)STARPU_VECTOR_GET_PTR(temporary_handle);
-
-    struct starpu_parameters parameters;
-    starpu_codelet_unpack_args(cl_arg, &parameters);
-
-    int margin_x = parameters.actual_x; 
-    for (int x = margin_x; x < parameters.mesh_width - margin_x; ++x) {
-        mesh[x] = temporary[x];
-    }
-}
 
 
-void stencil_cpu_func_block(void *buffers[], void *cl_arg) {
-    struct starpu_vector_interface *mesh_vh = buffers[0];
-    struct starpu_vector_interface *tmp_vh  = buffers[1];
-    struct starpu_vector_interface *coef_vh = buffers[2];
-
-    ELEMENT_TYPE *mesh = (ELEMENT_TYPE *)STARPU_VECTOR_GET_PTR(mesh_vh);
-    ELEMENT_TYPE *tmp  = (ELEMENT_TYPE *)STARPU_VECTOR_GET_PTR(tmp_vh);
-    float *coefs       = (float *)STARPU_VECTOR_GET_PTR(coef_vh);
-
-    struct starpu_parameters params;
-    starpu_codelet_unpack_args(cl_arg, &params);
-
-    int margin_x = (params.stencil_widht - 1) / 2;
-    int margin_y = (params.stencil_height - 1) / 2;
-    int mesh_w   = params.mesh_width;
-
-    for (int y = params.block_start; y < params.block_end; y++) {
-        for (int x = margin_x; x < mesh_w - margin_x; x++) {
-            ELEMENT_TYPE value = mesh[y * mesh_w + x];
-            for (int sy = 0; sy < params.stencil_height; sy++) {
-                int yy = y + sy - margin_y;
-                for (int sx = 0; sx < params.stencil_widht; sx++) {
-                    int xx = x + sx - margin_x;
-                    value += mesh[yy * mesh_w + xx] * coefs[sy * params.stencil_widht + sx];
-                }
-            }
-            tmp[y * mesh_w + x] = value;
-        }
-    }
-}
 
 
+
+/**
+ * Version partitionné par lignes, on envoie seulement les lignes nécéssaires pour chaques taches mais  on reste à une tache par ligne.
+ */
 static void starpu_stencil_func_v2_partitioned(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
     const int mesh_w = p_settings->mesh_width;
@@ -835,6 +802,41 @@ static void starpu_stencil_func_v2_partitioned(ELEMENT_TYPE *p_mesh, struct s_se
 }
 
 
+
+void stencil_cpu_func_block(void *buffers[], void *cl_arg) {
+    struct starpu_vector_interface *mesh_vh = buffers[0];
+    struct starpu_vector_interface *tmp_vh  = buffers[1];
+    struct starpu_vector_interface *coef_vh = buffers[2];
+
+    ELEMENT_TYPE *mesh = (ELEMENT_TYPE *)STARPU_VECTOR_GET_PTR(mesh_vh);
+    ELEMENT_TYPE *tmp  = (ELEMENT_TYPE *)STARPU_VECTOR_GET_PTR(tmp_vh);
+    float *coefs       = (float *)STARPU_VECTOR_GET_PTR(coef_vh);
+
+    struct starpu_parameters params;
+    starpu_codelet_unpack_args(cl_arg, &params);
+
+    int margin_x = (params.stencil_widht - 1) / 2;
+    int margin_y = (params.stencil_height - 1) / 2;
+    int mesh_w   = params.mesh_width;
+
+    for (int y = params.block_start; y < params.block_end; y++) {
+        for (int x = margin_x; x < mesh_w - margin_x; x++) {
+            ELEMENT_TYPE value = mesh[y * mesh_w + x];
+            for (int sy = 0; sy < params.stencil_height; sy++) {
+                int yy = y + sy - margin_y;
+                for (int sx = 0; sx < params.stencil_widht; sx++) {
+                    int xx = x + sx - margin_x;
+                    value += mesh[yy * mesh_w + xx] * coefs[sy * params.stencil_widht + sx];
+                }
+            }
+            tmp[y * mesh_w + x] = value;
+        }
+    }
+}
+
+/**
+ * Cette dernière version n'est pas partitionnée mais on travail sur des taches plus grosses.
+ */
 static void starpu_stencil_func_v2_big_tasks(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
 {
     const int mesh_w = p_settings->mesh_width;
