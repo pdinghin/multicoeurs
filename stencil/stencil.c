@@ -326,7 +326,7 @@ static void print_settings_csv(struct s_settings *p_settings)
 {
         FILE *fptr;
         fptr = fopen("seq.csv", "a+");
-        fprintf(fptr, "%d,%d,%d,%d,seq_good_order\n", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
+        fprintf(fptr, "%d,%d,%d,%d,seq_good_order,", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
         fclose(fptr);
         //printf("%d,%d,%d,%d", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
 }
@@ -338,6 +338,10 @@ static void print_results_csv_header(void)
 
 static void print_results_csv(int rep, double timing_in_seconds, int check_status)
 {
+        FILE *fptr;
+        fptr = fopen("seq.csv", "a+");
+        fprintf(fptr, "%d", timing_in_seconds);
+        fclose(fptr);
         printf("%d,%le,%d", rep, timing_in_seconds, check_status);
 }
 

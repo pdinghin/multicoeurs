@@ -339,6 +339,10 @@ static void print_results_csv_header(void)
 
 static void print_results_csv(int rep, double timing_in_seconds, int check_status)
 {
+        FILE *fptr;
+        fptr = fopen("vec.csv", "a+");
+        fprintf(fptr, "%d", timing_in_seconds);
+        fclose(fptr);
         printf("%d,%le,%d", rep, timing_in_seconds, check_status);
 }
 
