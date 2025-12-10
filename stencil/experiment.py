@@ -23,11 +23,10 @@ tests = [
 
 for test in tests:
     nom = test[0]
-    subprocess.run(
+    subprocess.Popen(
         test,              
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
     )
-    print(f"✅ {nom} terminé.")
-print("\nTous les tests sont terminés.")
+    
