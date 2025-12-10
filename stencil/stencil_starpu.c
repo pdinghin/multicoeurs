@@ -345,7 +345,11 @@ static void print_results_csv_header(void)
 
 static void print_results_csv(int rep, double timing_in_seconds, int check_status)
 {
-        printf("%d,%le,%d", rep, timing_in_seconds, check_status);
+        FILE *fptr;
+        fptr = fopen("starpu.csv", "a+");
+        fprintf(fptr, "%d,%d,%d,%d,starpu_big_task", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
+        fclose(fptr);
+        //printf("%d,%le,%d", rep, timing_in_seconds, check_status);
 }
 
 static void print_csv_header(void)
