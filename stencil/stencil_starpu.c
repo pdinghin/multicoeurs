@@ -337,7 +337,7 @@ static void print_settings_csv(struct s_settings *p_settings)
 {
         FILE *fptr;
         fptr = fopen("starpu.csv", "a+");
-        fprintf(fptr, "%d,%d,%d,%d,starpu_big_task\n", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
+        fprintf(fptr, "%d,%d,%d,%d,starpu_big_task,", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
         fclose(fptr);
         //printf("%d,%d,%d,%d", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
 }
@@ -351,7 +351,7 @@ static void print_results_csv(int rep, double timing_in_seconds, int check_statu
 {
         FILE *fptr;
         fptr = fopen("starpu.csv", "a+");
-        fprintf(fptr, "%le", timing_in_seconds);
+        fprintf(fptr, "%le\n", timing_in_seconds);
         fclose(fptr);
         printf("%d,%le,%d", rep, timing_in_seconds, check_status);
 }
