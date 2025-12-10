@@ -26,7 +26,6 @@ for test in tests:
     subprocess.Popen(
         test,              
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
+        stderr=subprocess.PIPE
     )
     
