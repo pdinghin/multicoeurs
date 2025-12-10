@@ -335,11 +335,11 @@ static void print_settings_csv_header(void)
 
 static void print_settings_csv(struct s_settings *p_settings)
 {
-        FILE *fptr;
-        fptr = fopen("starpu.csv", "a+");
-        fprintf(fptr, "%d,%d,%d,%d,starpu_naive,", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
-        fclose(fptr);
-        //printf("%d,%d,%d,%d", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
+        // FILE *fptr;
+        // fptr = fopen("starpu.csv", "a+");
+        // fprintf(fptr, "%d,%d,%d,%d,starpu_naive,", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
+        // fclose(fptr);
+        printf("%d,%d,%d,%d", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
 }
 
 static void print_results_csv_header(void)
@@ -349,10 +349,10 @@ static void print_results_csv_header(void)
 
 static void print_results_csv(int rep, double timing_in_seconds, int check_status)
 {
-        FILE *fptr;
-        fptr = fopen("starpu.csv", "a+");
-        fprintf(fptr, "%le\n", timing_in_seconds);
-        fclose(fptr);
+        // FILE *fptr;
+        // fptr = fopen("starpu.csv", "a+");
+        // fprintf(fptr, "%le\n", timing_in_seconds);
+        // fclose(fptr);
         printf("%d,%le,%d", rep, timing_in_seconds, check_status);
 }
 
@@ -919,7 +919,7 @@ static void run(ELEMENT_TYPE *p_mesh, struct s_settings *p_settings)
         int i;
         for (i = 0; i < p_settings->nb_iterations; i++)
         {
-                starpu_stencil_func(p_mesh, p_settings);
+                starpu_stencil_func_v2_partitioned(p_mesh, p_settings);
 
                 if (p_settings->enable_output)
                 {
