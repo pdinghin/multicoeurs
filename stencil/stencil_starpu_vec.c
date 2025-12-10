@@ -337,7 +337,7 @@ static void print_settings_csv(struct s_settings *p_settings)
 {
         FILE *fptr;
         fptr = fopen("starpu_vec.csv", "a+");
-        fprintf(fptr, "%d,%d,%d,%d,starpu_vec\n", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
+        fprintf(fptr, "%d,%d,%d,%d,starpu_vec,", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
         fclose(fptr);
         //printf("%d,%d,%d,%d", p_settings->mesh_width, p_settings->mesh_height, p_settings->nb_iterations, p_settings->nb_repeat);
 }
@@ -351,7 +351,7 @@ static void print_results_csv(int rep, double timing_in_seconds, int check_statu
 {
         FILE *fptr;
         fptr = fopen("starpu_vec.csv", "a+");
-        fprintf(fptr, "%d", timing_in_seconds);
+        fprintf(fptr, "%le\n", timing_in_seconds);
         fclose(fptr);
         printf("%d,%le,%d", rep, timing_in_seconds, check_status);
 }
