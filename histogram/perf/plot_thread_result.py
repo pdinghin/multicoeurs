@@ -8,8 +8,12 @@ from typing import List
 
 EXECUTABLE: str = "./histogram_omp"
 
-ARRAY_LENS: List[int] = [100000, 500000, 1000000, 5000000, 10000000]
-
+ARRAY_LENS: List[int] = [10**2,
+    10**3,
+    10**4,
+    10**5,
+    10**6,
+    10**7  ]
 NB_THREADS: List[int] = [1, 2, 4, 8, 12, 16, 20, 24]
 
 NB_BINS: int = 5
